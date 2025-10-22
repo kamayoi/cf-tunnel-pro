@@ -1,0 +1,104 @@
+#!/bin/bash
+# CF Tunnel Manager for Proxmox
+# Author: kamayoi
+# Purpose: Education only
+# Requires: cloudflared, whiptail (optional)
+
+LOG_FILE="/var/log/cf-tunnel.log"
+CRED_DIR="/root/.cloudflared"
+
+# Colors
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+BLUE="\e[34m"
+RESET="\e[0m"
+
+# Log function
+log() {
+    echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Detect cloudflared status
+status_tunnel() {
+    if pgrep -x cloudflared >/dev/null; then
+        echo -e "${GREEN}Cloudflared is running${RESET}"
+    else
+        echo -e "${RED}Cloudflared is NOT running${RESET}"
+    fi
+}
+
+# DNS check
+dns_check() {
+    read -p "Enter domain to check (example: www.payzania.com): " DOMAIN
+    if host "$DOMAIN" >/dev/null 2>&1; then
+        echo -e "${GREEN}DNS for $DOMAIN is resolving properly.${RESET}"
+    else
+        echo -e "${RED}DNS for $DOMAIN is not resolving!${RESET}"
+    fi
+}
+
+# Interactive menu
+while true; do
+    CHOICE=$(whiptail --title "CF Tunnel Manager" --menu "Choose an option:" 20 60 10 \
+    "1" "Login to Cloudflare" \
+    "2" "Create Tunnel" \
+    "3" "List Tunnels" \
+    "4" "Tunnel Info" \
+    "5" "Route DNS" \
+    "6" "Cleanup Stale Connections" \
+    "7" "Delete Tunnel" \
+    "8" "Check Tunnel Status" \
+    "9" "DNS Check" \
+    "0" "Exit" 3>&1 1>&2 2>&3)
+
+    case $CHOICE in
+        1)
+            log "Logging into Cloudflare..."
+            cloudflared login
+            ;;
+        2)
+            read -p "Enter tunnel name: " TUNNEL_NAME
+            log "Creating tunnel $TUNNEL_NAME..."
+            cloudflared tunnel create "$TUNNEL_NAME"
+            ;;
+        3)
+            log "Listing tunnels..."
+            cloudflared tunnel list
+            ;;
+        4)
+            read -p "Enter tunnel name/ID: " TUNNEL_ID
+            log "Getting tunnel info for $TUNNEL_ID..."
+            cloudflared tunnel info "$TUNNEL_ID"
+            ;;
+        5)
+            read -p "Enter domain to route: " DOMAIN
+            read -p "Enter tunnel name: " TUNNEL_NAME
+            log "Routing $DOMAIN to $TUNNEL_NAME..."
+            cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN"
+            ;;
+        6)
+            read -p "Enter tunnel ID to cleanup: " TUNNEL_ID
+            log "Cleaning up stale connections for $TUNNEL_ID..."
+            cloudflared tunnel cleanup "$TUNNEL_ID"
+            ;;
+        7)
+            read -p "Enter tunnel name/ID to delete: " TUNNEL_ID
+            log "Deleting tunnel $TUNNEL_ID..."
+            cloudflared tunnel delete "$TUNNEL_ID"
+            ;;
+        8)
+            status_tunnel
+            ;;
+        9)
+            dns_check
+            ;;
+        0)
+            log "Exiting CF Tunnel Manager..."
+            exit 0
+            ;;
+        *)
+            echo -e "${YELLOW}Invalid option${RESET}"
+            ;;
+    esac
+done
